@@ -1,14 +1,17 @@
 package com4j.tlbimp.driver;
 
-import com4j.tlbimp.BindingException;
-import com4j.tlbimp.ErrorListener;
-import com4j.tlbimp.FileCodeWriter;
-import com4j.tlbimp.def.IWTypeLib;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
 
-import java.io.File;
+import com4j.tlbimp.BindingException;
+import com4j.tlbimp.ErrorListener;
+import com4j.tlbimp.FileCodeWriter;
+import com4j.tlbimp.def.IWTypeLib;
 
 /**
  * Maven2 mojo for running the com4j process to produce .java files for the
@@ -18,10 +21,10 @@ import java.io.File;
  * Effectively, this is what runs to generate .java code for something like
  * iTunes:
  * 
- * <br/> <code>
- * java -jar tlbimp.jar -o generated -p com.mycompany.com4j.itunes &quot;C:\Program Files\iTunes\iTunes.exe&quot;
- * </code>
  * <br/>
+ * <code>
+ * java -jar tlbimp.jar -o generated -p com.mycompany.com4j.itunes &quot;C:\Program Files\iTunes\iTunes.exe&quot;
+ * </code> <br/>
  * 
  * But we're using it from a Maven2 pom.xml file instead! This allows us to
  * automate code generation without worrying about how com4j is setup.
@@ -48,10 +51,12 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 	 * Specify the desired Java package for generated code. This can be used as
 	 * the alias, without the leading underscore:
 	 * 
-	 * <br/> <code>
+	 * <br/>
+	 * <code>
 	 * &lt;package&gt;com.mycompany.com4j.someprogram&lt;/package&gt;
-	 * </code>
-	 * <br/> Or as: <br/><code>
+	 * </code> <br/>
+	 * Or as: <br/>
+	 * <code>
 	 * &lt;_package&gt;com.mycompany.com4j.someprogram&lt;/_package&gt;
 	 * </code><br/>
 	 * 
@@ -80,10 +85,11 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 	 * specified, <code>&lt;libId&gt;</code> will win, and
 	 * <code>&lt;file&gt;</code> will be ignored.
 	 * 
-	 * <br/> File is the Win32 program that com4j is generating the COM
-	 * interface for. This file must exist at the given path. The path can be
-	 * absolute or relative. Generally this will specify your .exe, .dll, or
-	 * whatever file has a Windows COM interface. <br/>
+	 * <br/>
+	 * File is the Win32 program that com4j is generating the COM interface for.
+	 * This file must exist at the given path. The path can be absolute or
+	 * relative. Generally this will specify your .exe, .dll, or whatever file
+	 * has a Windows COM interface. <br/>
 	 * 
 	 * <code>
 	 * &lt;file&gt;C:\Program Files\iTunes\iTunes.exe&lt;/file&gt;
@@ -92,7 +98,7 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 	 * 
 	 * @parameter expression="${file}"
 	 */
-	private File file;
+	private List<File> file;
 
 	/**
 	 * You must specify either <code>&lt;file&gt;</code> or
@@ -100,8 +106,9 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 	 * specified, <code>&lt;libId&gt;</code> will win, and
 	 * <code>&lt;file&gt;</code> will be ignored.
 	 * 
-	 * <br/> LIBID is the Windows identifier of the type library to be
-	 * processed. It should be a string of the form
+	 * <br/>
+	 * LIBID is the Windows identifier of the type library to be processed. It
+	 * should be a string of the form
 	 * <code>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</code>. <br/>
 	 * 
 	 * Often, the location of type libraries vary from a system to system. For
@@ -111,8 +118,8 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 	 * the same project, this makes it difficult to consistently refer to the
 	 * same type library. libid and libver are useful in this case. Each type
 	 * library has a unique GUID called "LIBID", and the version of the type
-	 * library. <br/> For example, Microsoft Excel 2000 type library has the
-	 * LIBID of:<br />
+	 * library. <br/>
+	 * For example, Microsoft Excel 2000 type library has the LIBID of:<br />
 	 * 
 	 * <code>
 	 * &lt;libId&gt;00020813-0000-0000-C000-000000000046&lt;/libId&gt;
@@ -152,36 +159,40 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 		// all is good, now proceed with launch
 		Driver driver = new Driver();
 
-		Lib lib = new Lib();
+		List<Lib> libs = new ArrayList<Lib>();
 		// libId wins over the specified file
 		if (libId != null) {
+			Lib lib = new Lib();
 			lib.setLibid(libId);
 			if (libVer != null)
 				lib.setLibver(libVer);
+			lib.setPackage(_package);
+			libs.add(lib);
 		} else {
-			lib.setFile(file);
+			for (File fileItem : file) {
+				Lib lib = new Lib();
+				lib.setFile(fileItem);
+				lib.setPackage(_package);
+				libs.add(lib);
+			}
 		}
-		lib.setPackage(_package);
 
 		try {
-			lib.validate(); // could throw IAE
-			getLog().info(
-					"Generating COM for LIBID: " + lib.getLibid()
-							+ " found here: " + lib.getFile());
-			driver.addLib(lib);
+			for (Lib lib : libs) {
+				lib.validate(); // could throw IAE
+				getLog().info("Generating COM for LIBID: " + lib.getLibid() + " found here: " + lib.getFile());
+				driver.addLib(lib);
+			}
 			driver.run(new FileCodeWriter(outputDirectory), this);
 		} catch (NullPointerException npe) {
-			getLog()
-					.warn(
-							"Com4j had an NPE error while running."
-									+ " This usually happens when it can't create an interface."
-									+ " You many need to manually touch the files before trying to compile them.");
+			getLog().warn(
+					"Com4j had an NPE error while running." + " This usually happens when it can't create an interface."
+							+ " You many need to manually touch the files before trying to compile them.");
 		} catch (Exception e) {
 			// com4j may throw warnings if it can't handle something (like MS
 			// Excel), we should continue with the mojo though
-			getLog().warn(
-					"Com4j had an error while running: \n" + e.getMessage());
-			throw new MojoExecutionException(e.getMessage(),e);
+			getLog().warn("Com4j had an error while running: \n" + e.getMessage());
+			throw new MojoExecutionException(e.getMessage(), e);
 		}
 
 		getLog().debug("adding generated files to Maven compile source");
@@ -202,16 +213,14 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 		if (!osName.startsWith("Windows")) {
 			getLog().warn("Wrong OS: " + osName);
 			throw new MojoExecutionException(
-					"Com4j can only be run on a Windows operating system, and you're running: "
-							+ osName);
+					"Com4j can only be run on a Windows operating system, and you're running: " + osName);
 		}
 
 		// check output dir exists
 		if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
 			getLog().warn("outputDirectory couldn't be created");
-			throw new MojoExecutionException("The output directory "
-					+ outputDirectory
-					+ " doesn't exist and couldn't be created.");
+			throw new MojoExecutionException(
+					"The output directory " + outputDirectory + " doesn't exist and couldn't be created.");
 		}
 	}
 
@@ -222,16 +231,15 @@ public class Com4jgenMojo extends AbstractMojo implements ErrorListener {
 	 */
 	private void validate() throws MojoExecutionException {
 		if ((file == null && libId == null) || (file != null && libId != null)) {
-			getLog()
-					.warn(
-							"You specified <file> and <libId>.  The <libId> always wins.");
+			getLog().warn("You specified <file> and <libId>.  The <libId> always wins.");
 		}
 
 		// check that COM target exists
-		if (file != null && !file.exists()) {
-			getLog().warn("Can't find file: " + file);
-			throw new MojoExecutionException(
-					"The native COM target file couldn't be found: " + file);
+		for (File fileItem : file) {
+			if (fileItem != null && !fileItem.exists()) {
+				getLog().warn("Can't find file: " + fileItem);
+				throw new MojoExecutionException("The native COM target file couldn't be found: " + fileItem);
+			}
 		}
 	}
 
